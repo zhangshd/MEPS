@@ -1,0 +1,27 @@
+%chk=complex_method1.chk
+%mem=100GB
+%nprocshared=96
+#p opt freq B3LYP/6-311++G(d,p) empiricaldispersion=GD3BJ Counterpoise=2
+
+complex_method1 Counterpoise Calculation
+
+0 1 0 1 0 1
+ C(Fragment=1)     -1.211021     0.699188     0.000000
+ C(Fragment=1)     -1.211021    -0.699188     0.000000
+ C(Fragment=1)      0.000000    -1.398376     0.000000
+ C(Fragment=1)      1.211021    -0.699188     0.000000
+ C(Fragment=1)      1.211021     0.699188     0.000000
+ C(Fragment=1)      0.000000     1.398376     0.000000
+ H(Fragment=1)     -2.152500     1.242761     0.000000
+ H(Fragment=1)     -2.152500    -1.242761     0.000000
+ H(Fragment=1)      0.000000    -2.485522     0.000000
+ H(Fragment=1)      2.152500    -1.242761     0.000000
+ H(Fragment=1)      2.152500     1.242761     0.000000
+ H(Fragment=1)      0.000000     2.485522     0.000000
+ C(Fragment=2)      0.500000    -0.300000    -3.800000
+ H(Fragment=2)      0.500000    -0.300000    -2.711000
+ H(Fragment=2)      1.526720    -0.300000    -4.163000
+ H(Fragment=2)     -0.013360    -1.189165    -4.163000
+ H(Fragment=2)     -0.013360     0.589165    -4.163000
+
+

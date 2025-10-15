@@ -1,0 +1,85 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.git*/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Gaussian files
+*.chk
+*.fchk
+*.rwf
+*.log
+*.out
+*.wfn
+*.wfx
+fort.*
+
+# Vina files
+*.pdbqt
+
+# Calculation directories
+meps_calculations/
+example_calculations/
+batch_calculations/
+*/vina_docking/
+*/vina_work/
+
+# Output files
+data/output/*
+!data/output/.gitkeep
+results/
+*.json
+*.txt
+
+# Test output
+tests/test_output/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+temp/
+tmp/
+
+# Keep example directory structure
+!example/
+example/*.chk
+example/*.fchk
+example/*.rwf
