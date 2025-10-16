@@ -74,6 +74,16 @@ python -c "import openbabel; import vina; print('环境配置成功!')"
 
 ## 使用方法
 
+### 支持的文件格式
+
+MEPS支持以下分子结构文件格式：
+- **XYZ** (.xyz): 笛卡尔坐标格式
+- **PDB** (.pdb): 蛋白质数据库格式
+- **MOL/SDF** (.mol, .sdf): MDL MOL格式
+- **Gaussian输出** (.log, .out): 优化后的结构
+
+> 详细的MOL格式使用说明请参考 [`docs/MOL_FORMAT.md`](docs/MOL_FORMAT.md)
+
 ### 快速开始
 
 ```python
@@ -85,7 +95,7 @@ pipeline = InteractionEnergyPipeline(
     work_dir="./data/output/my_calculation"
 )
 
-# 运行完整流程
+# 运行完整流程（支持.xyz, .pdb, .mol, .sdf格式）
 results = pipeline.run_full_pipeline(
     molecule_a="path/to/molecule_a.xyz",
     molecule_b="path/to/molecule_b.xyz",
@@ -97,6 +107,22 @@ results = pipeline.run_full_pipeline(
 # 查看结果
 print(f"相互作用能 (校正后): {results['complexation_energy_corrected']} kcal/mol")
 print(f"BSSE能量: {results['bsse_energy']} Hartree")
+```
+
+### 使用命令行脚本
+
+```bash
+# 基本用法（支持.xyz, .pdb, .mol, .sdf格式）
+python scripts/run_pipeline.py molecule_a.xyz molecule_b.xyz
+
+# 指定计算参数
+python scripts/run_pipeline.py benzene.mol methane.mol \
+    --name_a benzene --name_b methane \
+    --functional M06-2X --basis def2-TZVP \
+    --mem 50GB --nproc 48
+
+# 查看所有选项
+python scripts/run_pipeline.py --help
 ```
 
 ### 分步运行
@@ -179,7 +205,12 @@ zhangshd
 
 ## 更新日志
 
-- v1.0.0 (2025-10-12): 初始版本发布
-  - 实现单体优化、分子对接、复合物优化的完整流程
-  - 自动提取相互作用能和BSSE能量
+- **v1.1.0** (2025-10-16): 添加MOL/SDF格式支持
+  - 支持读写MOL/SDF格式文件
+  - 完整的Pipeline集成
+  - 详见 [`docs/MOL_FORMAT.md`](docs/MOL_FORMAT.md)
+  
+- **v1.0.0** (2025-10-12): 初始版本发布
+  - 完整的相互作用能计算流程
+  - 自动BSSE校正
   - 支持批量计算

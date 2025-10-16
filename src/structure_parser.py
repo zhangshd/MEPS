@@ -9,6 +9,18 @@ import os
 from typing import List, Tuple, Dict, Optional
 import numpy as np
 
+try:
+    from openbabel import openbabel as ob
+    OPENBABEL_AVAILABLE = True
+except ImportError:
+    OPENBABEL_AVAILABLE = False
+
+try:
+    from rdkit import Chem
+    RDKIT_AVAILABLE = True
+except ImportError:
+    RDKIT_AVAILABLE = False
+
 
 class StructureParser:
     """分子结构解析器，支持多种格式的分子结构文件读写"""
@@ -61,6 +73,92 @@ class StructureParser:
                     z = float(line[46:54].strip())
                     
                     self.atoms.append((element, x, y, z))
+    
+    def read_mol(self, filepath: str) -> None:
+        """
+        Read MOL/SDF format molecular structure file
+        
+        This method supports reading MOL and SDF format files using either 
+        OpenBabel or RDKit library. The file can contain 2D or 3D coordinates.
+        
+        Args:
+            filepath: Path to the MOL/SDF file
+            
+        Raises:
+            RuntimeError: If neither OpenBabel nor RDKit is available
+            ValueError: If the file cannot be parsed
+        """
+        self.atoms = []
+        
+        if OPENBABEL_AVAILABLE:
+            self._read_mol_openbabel(filepath)
+        elif RDKIT_AVAILABLE:
+            self._read_mol_rdkit(filepath)
+        else:
+            raise RuntimeError(
+                "MOL format support requires either OpenBabel or RDKit. "
+                "Please install one of them: conda install openbabel or conda install rdkit"
+            )
+    
+    def _read_mol_openbabel(self, filepath: str) -> None:
+        """
+        Read MOL file using OpenBabel library
+        
+        Args:
+            filepath: Path to the MOL/SDF file
+        """
+        obConversion = ob.OBConversion()
+        obConversion.SetInFormat("mol")
+        
+        mol = ob.OBMol()
+        success = obConversion.ReadFile(mol, filepath)
+        
+        if not success:
+            raise ValueError(f"Failed to read MOL file: {filepath}")
+        
+        self.atoms = []
+        for i in range(mol.NumAtoms()):
+            atom = mol.GetAtom(i + 1)
+            element = atom.GetType()
+            if len(element) > 1 and element[1].isupper():
+                element = element[0]
+            x = atom.GetX()
+            y = atom.GetY()
+            z = atom.GetZ()
+            self.atoms.append((element, x, y, z))
+        
+        self.charge = mol.GetTotalCharge()
+        self.multiplicity = mol.GetTotalSpinMultiplicity()
+    
+    def _read_mol_rdkit(self, filepath: str) -> None:
+        """
+        Read MOL file using RDKit library
+        
+        Args:
+            filepath: Path to the MOL/SDF file
+        """
+        mol = Chem.MolFromMolFile(filepath, removeHs=False)
+        
+        if mol is None:
+            raise ValueError(f"Failed to read MOL file: {filepath}")
+        
+        if mol.GetNumConformers() == 0:
+            raise ValueError(f"No 3D coordinates found in MOL file: {filepath}")
+        
+        conf = mol.GetConformer()
+        self.atoms = []
+        
+        for i in range(mol.GetNumAtoms()):
+            atom = mol.GetAtomWithIdx(i)
+            element = atom.GetSymbol()
+            pos = conf.GetAtomPosition(i)
+            x, y, z = pos.x, pos.y, pos.z
+            self.atoms.append((element, x, y, z))
+        
+        self.charge = Chem.GetFormalCharge(mol)
+        
+        num_radical_electrons = sum(atom.GetNumRadicalElectrons() for atom in mol.GetAtoms())
+        self.multiplicity = num_radical_electrons + 1
     
     def read_gaussian_output(self, filepath: str) -> None:
         """
@@ -130,6 +228,96 @@ class StructureParser:
                 f.write(f"ATOM  {i:5d}  {element:2s}  MOL A   1    "
                        f"{x:8.3f}{y:8.3f}{z:8.3f}  1.00  0.00          {element:2s}\n")
             f.write("END\n")
+    
+    def write_mol(self, filepath: str, mol_title: str = "Molecule") -> None:
+        """
+        Write MOL/SDF format molecular structure file
+        
+        This method supports writing MOL format files using either 
+        OpenBabel or RDKit library. The output is in V2000 format.
+        
+        Args:
+            filepath: Path to the output MOL file
+            mol_title: Title/name for the molecule (optional)
+            
+        Raises:
+            RuntimeError: If neither OpenBabel nor RDKit is available
+        """
+        if OPENBABEL_AVAILABLE:
+            self._write_mol_openbabel(filepath, mol_title)
+        elif RDKIT_AVAILABLE:
+            self._write_mol_rdkit(filepath, mol_title)
+        else:
+            raise RuntimeError(
+                "MOL format support requires either OpenBabel or RDKit. "
+                "Please install one of them: conda install openbabel or conda install rdkit"
+            )
+    
+    def _write_mol_openbabel(self, filepath: str, mol_title: str) -> None:
+        """
+        Write MOL file using OpenBabel library
+        
+        Args:
+            filepath: Path to the output MOL file
+            mol_title: Title for the molecule
+        """
+        mol = ob.OBMol()
+        mol.SetTitle(mol_title)
+        
+        element_to_atomic_num = {
+            'H': 1, 'C': 6, 'N': 7, 'O': 8, 'F': 9,
+            'P': 15, 'S': 16, 'Cl': 17, 'Br': 35, 'I': 53
+        }
+        
+        for element, x, y, z in self.atoms:
+            atom = mol.NewAtom()
+            atomic_num = element_to_atomic_num.get(element, 6)
+            atom.SetAtomicNum(atomic_num)
+            atom.SetVector(x, y, z)
+        
+        mol.SetTotalCharge(int(self.charge))
+        
+        obConversion = ob.OBConversion()
+        obConversion.SetOutFormat("mol")
+        success = obConversion.WriteFile(mol, filepath)
+        
+        if not success:
+            raise RuntimeError(f"Failed to write MOL file: {filepath}")
+    
+    def _write_mol_rdkit(self, filepath: str, mol_title: str) -> None:
+        """
+        Write MOL file using RDKit library
+        
+        Args:
+            filepath: Path to the output MOL file
+            mol_title: Title for the molecule
+        """
+        rwmol = Chem.RWMol()
+        
+        element_to_atomic_num = {
+            'H': 1, 'C': 6, 'N': 7, 'O': 8, 'F': 9,
+            'P': 15, 'S': 16, 'Cl': 17, 'Br': 35, 'I': 53
+        }
+        
+        atom_indices = []
+        for element, x, y, z in self.atoms:
+            atomic_num = element_to_atomic_num.get(element, 6)
+            atom = Chem.Atom(atomic_num)
+            idx = rwmol.AddAtom(atom)
+            atom_indices.append(idx)
+        
+        mol = rwmol.GetMol()
+        
+        conf = Chem.Conformer(len(self.atoms))
+        for i, (element, x, y, z) in enumerate(self.atoms):
+            conf.SetAtomPosition(i, (x, y, z))
+        mol.AddConformer(conf)
+        
+        mol.SetProp("_Name", mol_title)
+        
+        writer = Chem.SDWriter(filepath)
+        writer.write(mol)
+        writer.close()
     
     def write_gaussian_coords(self, filepath: str, fragment: Optional[int] = None) -> None:
         """
