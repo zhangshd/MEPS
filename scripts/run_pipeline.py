@@ -47,11 +47,11 @@ Examples:
     # Required arguments
     parser.add_argument(
         'molecule_a',
-        help='Structure file for molecule A (supports .xyz, .pdb, .mol, .sdf formats)'
+        help='Structure file for molecule A (supports .xyz, .pdb, .mol, .sdf, .mol2 formats)'
     )
     parser.add_argument(
         'molecule_b',
-        help='Structure file for molecule B (supports .xyz, .pdb, .mol, .sdf formats)'
+        help='Structure file for molecule B (supports .xyz, .pdb, .mol, .sdf, .mol2 formats)'
     )
     
     # Optional arguments - Molecule information

@@ -528,8 +528,8 @@ class InteractionEnergyPipeline:
         运行完整的相互作用能计算流程
         
         Args:
-            molecule_a_file: 分子A的结构文件(.xyz, .pdb, .mol, .sdf等)
-            molecule_b_file: 分子B的结构文件(.xyz, .pdb, .mol, .sdf等)
+            molecule_a_file: 分子A的结构文件(.xyz, .pdb, .mol, .sdf, .mol2等)
+            molecule_b_file: 分子B的结构文件(.xyz, .pdb, .mol, .sdf, .mol2等)
             name_a: 分子A的名称
             name_b: 分子B的名称
             functional: 泛函
@@ -562,6 +562,8 @@ class InteractionEnergyPipeline:
             struct_a.read_pdb(molecule_a_file)
         elif ext_a in ['.mol', '.sdf']:
             struct_a.read_mol(molecule_a_file)
+        elif ext_a == '.mol2':
+            struct_a.read_mol2(molecule_a_file)
         else:
             raise ValueError(f"不支持的文件格式: {ext_a}")
         
@@ -571,6 +573,8 @@ class InteractionEnergyPipeline:
             struct_b.read_pdb(molecule_b_file)
         elif ext_b in ['.mol', '.sdf']:
             struct_b.read_mol(molecule_b_file)
+        elif ext_b == '.mol2':
+            struct_b.read_mol2(molecule_b_file)
         else:
             raise ValueError(f"不支持的文件格式: {ext_b}")
         

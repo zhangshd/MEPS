@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-MOL Format Usage Example
-This example demonstrates basic MOL/SDF format file operations with MEPS
+MOL/MOL2 Format Usage Example
+This example demonstrates basic MOL/SDF/MOL2 format file operations with MEPS
 Author: zhangshd
 Date: 2025-10-16
 """
@@ -22,19 +22,22 @@ def example_basic_operations():
     
     # Read XYZ and convert to MOL
     parser = StructureParser()
-    xyz_file = "../data/input/water.xyz"
-    parser.read_xyz(xyz_file)
+    project_root = Path(__file__).parent.parent
+    xyz_file = project_root / "data/input/water.xyz"
+    parser.read_xyz(str(xyz_file))
     print(f"\nRead XYZ file: {xyz_file}")
     print(f"Number of atoms: {parser.get_atom_count()}")
     
     # Write to MOL format
-    mol_file = "../data/output/water_example.mol"
-    parser.write_mol(mol_file, mol_title="Water Molecule")
+    output_dir = project_root / "data/output"
+    output_dir.mkdir(exist_ok=True, parents=True)
+    mol_file = output_dir / "water_example.mol"
+    parser.write_mol(str(mol_file), mol_title="Water Molecule")
     print(f"Wrote MOL file: {mol_file}")
     
     # Read MOL file back
     parser2 = StructureParser()
-    parser2.read_mol(mol_file)
+    parser2.read_mol(str(mol_file))
     print(f"Read MOL file: {parser2.get_atom_count()} atoms")
     print(f"Charge: {parser2.charge}, Multiplicity: {parser2.multiplicity}")
     
@@ -50,9 +53,10 @@ def example_format_conversion():
     print("="*70)
     
     parser = StructureParser()
-    parser.read_xyz("../data/input/water.xyz")
+    project_root = Path(__file__).parent.parent
+    parser.read_xyz(str(project_root / "data/input/water.xyz"))
     
-    output_dir = Path("../data/output")
+    output_dir = project_root / "data/output"
     output_dir.mkdir(exist_ok=True, parents=True)
     
     # Convert to different formats
@@ -60,6 +64,7 @@ def example_format_conversion():
         ("XYZ", "water_conv.xyz", lambda f: parser.write_xyz(f, "Converted")),
         ("PDB", "water_conv.pdb", lambda f: parser.write_pdb(f)),
         ("MOL", "water_conv.mol", lambda f: parser.write_mol(f, "Water")),
+        ("MOL2", "water_conv.mol2", lambda f: parser.write_mol2(f, "Water")),
     ]
     
     print("\nConverting water molecule:")
@@ -94,7 +99,7 @@ results = pipeline.run_full_pipeline(
 )
     """)
     
-    print("\nSupported formats: .xyz, .pdb, .mol, .sdf")
+    print("\nSupported formats: .xyz, .pdb, .mol, .sdf, .mol2")
 
 
 def main():

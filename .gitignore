@@ -26,6 +26,7 @@ ENV/
 env/
 .venv
 
+
 # IDE
 .vscode/
 .idea/
@@ -83,3 +84,11 @@ tmp/
 example/*.chk
 example/*.fchk
 example/*.rwf
+
+*.mol*
+*.pdb
+*.sdf
+*.inp
+*.d2e
+*.int
+*.skr

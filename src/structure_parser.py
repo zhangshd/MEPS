@@ -160,6 +160,49 @@ class StructureParser:
         num_radical_electrons = sum(atom.GetNumRadicalElectrons() for atom in mol.GetAtoms())
         self.multiplicity = num_radical_electrons + 1
     
+    def read_mol2(self, filepath: str) -> None:
+        """
+        Read MOL2 (Tripos) format molecular structure file
+        
+        This method reads MOL2 format files using OpenBabel library.
+        MOL2 format includes atom types and bond information.
+        
+        Args:
+            filepath: Path to the MOL2 file
+            
+        Raises:
+            RuntimeError: If OpenBabel is not available
+            ValueError: If the file cannot be parsed
+        """
+        if not OPENBABEL_AVAILABLE:
+            raise RuntimeError(
+                "MOL2 format support requires OpenBabel. "
+                "Please install it: conda install openbabel"
+            )
+        
+        obConversion = ob.OBConversion()
+        obConversion.SetInFormat("mol2")
+        
+        mol = ob.OBMol()
+        success = obConversion.ReadFile(mol, filepath)
+        
+        if not success:
+            raise ValueError(f"Failed to read MOL2 file: {filepath}")
+        
+        self.atoms = []
+        for i in range(mol.NumAtoms()):
+            atom = mol.GetAtom(i + 1)
+            element = atom.GetType()
+            if len(element) > 1 and element[1].isupper():
+                element = element[0]
+            x = atom.GetX()
+            y = atom.GetY()
+            z = atom.GetZ()
+            self.atoms.append((element, x, y, z))
+        
+        self.charge = mol.GetTotalCharge()
+        self.multiplicity = mol.GetTotalSpinMultiplicity()
+    
     def read_gaussian_output(self, filepath: str) -> None:
         """
         从Gaussian输出文件中读取优化后的结构
@@ -318,6 +361,49 @@ class StructureParser:
         writer = Chem.SDWriter(filepath)
         writer.write(mol)
         writer.close()
+    
+    def write_mol2(self, filepath: str, mol_title: str = "Molecule") -> None:
+        """
+        Write MOL2 (Tripos) format molecular structure file
+        
+        This method writes MOL2 format files using OpenBabel library.
+        The output includes atom types and basic connectivity.
+        
+        Args:
+            filepath: Path to the output MOL2 file
+            mol_title: Title/name for the molecule (optional)
+            
+        Raises:
+            RuntimeError: If OpenBabel is not available
+        """
+        if not OPENBABEL_AVAILABLE:
+            raise RuntimeError(
+                "MOL2 format support requires OpenBabel. "
+                "Please install it: conda install openbabel"
+            )
+        
+        mol = ob.OBMol()
+        mol.SetTitle(mol_title)
+        
+        element_to_atomic_num = {
+            'H': 1, 'C': 6, 'N': 7, 'O': 8, 'F': 9,
+            'P': 15, 'S': 16, 'Cl': 17, 'Br': 35, 'I': 53
+        }
+        
+        for element, x, y, z in self.atoms:
+            atom = mol.NewAtom()
+            atomic_num = element_to_atomic_num.get(element, 6)
+            atom.SetAtomicNum(atomic_num)
+            atom.SetVector(x, y, z)
+        
+        mol.SetTotalCharge(int(self.charge))
+        
+        obConversion = ob.OBConversion()
+        obConversion.SetOutFormat("mol2")
+        success = obConversion.WriteFile(mol, filepath)
+        
+        if not success:
+            raise RuntimeError(f"Failed to write MOL2 file: {filepath}")
     
     def write_gaussian_coords(self, filepath: str, fragment: Optional[int] = None) -> None:
         """

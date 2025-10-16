@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Test MOL Format Support
-This script tests the MOL/SDF file reading and writing functionality
+Test MOL/MOL2 Format Support
+This script tests the MOL/SDF/MOL2 file reading and writing functionality
 Author: zhangshd
 Date: 2025-10-16
 """
@@ -155,10 +155,49 @@ def test_multiple_formats():
     print("\n")
 
 
+def test_mol2_format():
+    """Test MOL2 format reading and writing"""
+    print("="*70)
+    print("Test 5: MOL2 Format Support")
+    print("="*70)
+    
+    input_dir = Path(__file__).parent.parent / 'data' / 'input'
+    output_dir = Path(__file__).parent / 'test_output'
+    output_dir.mkdir(exist_ok=True)
+    
+    water_xyz = input_dir / 'water.xyz'
+    
+    if not water_xyz.exists():
+        print(f"Warning: {water_xyz} not found, skipping this test")
+        return
+    
+    # Read XYZ and write to MOL2
+    parser = StructureParser()
+    parser.read_xyz(str(water_xyz))
+    print(f"Read XYZ: {parser.get_atom_count()} atoms")
+    
+    mol2_file = output_dir / 'water.mol2'
+    parser.write_mol2(str(mol2_file), mol_title="Water Molecule")
+    print(f"Wrote MOL2: {mol2_file}")
+    
+    # Read MOL2 back
+    parser2 = StructureParser()
+    parser2.read_mol2(str(mol2_file))
+    print(f"Read MOL2 back: {parser2.get_atom_count()} atoms")
+    
+    # Verify
+    if parser.get_atom_count() == parser2.get_atom_count():
+        print(f"✓ MOL2 roundtrip successful! Atom count: {parser.get_atom_count()}")
+    else:
+        print(f"✗ Atom count mismatch!")
+    
+    print("\n")
+
+
 def main():
     """Run all tests"""
     print("\n" + "="*70)
-    print("MOL Format Support Tests")
+    print("MOL/MOL2 Format Support Tests")
     print("="*70 + "\n")
     
     try:
@@ -166,6 +205,7 @@ def main():
         test_read_mol_file()
         test_mol_xyz_roundtrip()
         test_multiple_formats()
+        test_mol2_format()
         
         print("="*70)
         print("All tests completed!")

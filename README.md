@@ -10,7 +10,8 @@ MEPS (Molecular Interaction Energy Pipeline System) 是一个基于Python的自�
 2. **分子对接**: 使用AutoDock Vina对两个优化后的分子进行对接，获得初始复合物构象
 3. **复合物优化**: 自动生成带Counterpoise校正的复合物输入文件并运行优化
 4. **结果提取**: 自动从Gaussian输出文件中提取相互作用能、BSSE能量等关键信息
-5. **批量处理**: 支持批量处理多对分子的相互作用能计算
+5. **批量并行处理**: 自动化批量计算多对分子的相互作用能，支持并行计算
+6. **多格式支持**: 支持XYZ, PDB, MOL, SDF, MOL2等多种分子结构文件格式
 
 ## 理论背景
 
@@ -40,9 +41,12 @@ MEPS/
 │   ├── structure_parser.py       # 分子结构解析
 │   └── result_extractor.py       # 结果提取模块
 ├── scripts/                      # 脚本目录
-│   └── run_pipeline.py           # 主流程脚本
+│   ├── run_pipeline.py           # 单对分子计算脚本
+│   └── batch_interaction_energy.py  # 批量并行计算脚本
 ├── examples/                     # 示例文件
-│   └── tutorial_example.py       # 使用教程示例
+│   ├── tutorial_example.py       # 使用教程示例
+│   ├── batch_calculation_example.py  # 批处理示例
+│   └── mol_format_example.py     # MOL格式使用示例
 ├── data/                         # 数据目录
 │   ├── input/                    # 输入文件
 │   └── output/                   # 输出结果
@@ -80,9 +84,10 @@ MEPS支持以下分子结构文件格式：
 - **XYZ** (.xyz): 笛卡尔坐标格式
 - **PDB** (.pdb): 蛋白质数据库格式
 - **MOL/SDF** (.mol, .sdf): MDL MOL格式
+- **MOL2** (.mol2): Tripos MOL2格式
 - **Gaussian输出** (.log, .out): 优化后的结构
 
-> 详细的MOL格式使用说明请参考 [`docs/MOL_FORMAT.md`](docs/MOL_FORMAT.md)
+> 详细的MOL/MOL2格式使用说明请参考 [`docs/MOL_FORMAT.md`](docs/MOL_FORMAT.md)
 
 ### 快速开始
 
@@ -95,7 +100,7 @@ pipeline = InteractionEnergyPipeline(
     work_dir="./data/output/my_calculation"
 )
 
-# 运行完整流程（支持.xyz, .pdb, .mol, .sdf格式）
+# 运行完整流程（支持.xyz, .pdb, .mol, .sdf, .mol2格式）
 results = pipeline.run_full_pipeline(
     molecule_a="path/to/molecule_a.xyz",
     molecule_b="path/to/molecule_b.xyz",
@@ -111,8 +116,10 @@ print(f"BSSE能量: {results['bsse_energy']} Hartree")
 
 ### 使用命令行脚本
 
+#### 单个分子对计算
+
 ```bash
-# 基本用法（支持.xyz, .pdb, .mol, .sdf格式）
+# 基本用法（支持.xyz, .pdb, .mol, .sdf, .mol2格式）
 python scripts/run_pipeline.py molecule_a.xyz molecule_b.xyz
 
 # 指定计算参数
@@ -123,6 +130,52 @@ python scripts/run_pipeline.py benzene.mol methane.mol \
 
 # 查看所有选项
 python scripts/run_pipeline.py --help
+```
+
+#### 批量并行计算
+
+对于需要计算多个分子对的场景，使用批处理脚本可以自动发现文件并并行计算：
+
+```bash
+# 基本用法：自动并行计算molA和molB文件夹中所有分子的两两组合
+python scripts/batch_interaction_energy.py molA/ molB/ results/
+
+# 控制并行度：每个任务96核，最多同时运行4个任务
+python scripts/batch_interaction_energy.py molA/ molB/ results/ \
+    --nproc 96 --max-jobs 4
+
+# 指定计算参数
+python scripts/batch_interaction_energy.py molA/ molB/ results/ \
+    --functional M06-2X --basis def2-TZVP --mem 50GB
+
+# 仅处理特定格式
+python scripts/batch_interaction_energy.py molA/ molB/ results/ \
+    --extensions .mol .mol2
+
+# 查看使用示例和CPU配置建议
+python examples/batch_calculation_example.py
+```
+
+**批处理脚本特点**：
+- 自动发现两个文件夹中的所有分子文件
+- 生成所有可能的分子对组合（笛卡尔积）
+- 根据系统CPU数量和单任务核数自动配置并行度
+- 每个分子对的结果保存在独立文件夹中
+- 生成 `batch_summary.json` 汇总所有计算结果
+- 支持失败重试和错误报告
+
+**输出结构示例**：
+```
+results/
+├── batch_summary.json          # 总体汇总文件
+├── water_methane/              # 第一对分子的结果
+│   ├── complex.log
+│   ├── results.json
+│   └── ...
+├── water_ethane/               # 第二对分子的结果
+│   └── ...
+└── benzene_methane/            # 第三对分子的结果
+    └── ...
 ```
 
 ### 分步运行
@@ -205,8 +258,14 @@ zhangshd
 
 ## 更新日志
 
-- **v1.1.0** (2025-10-16): 添加MOL/SDF格式支持
-  - 支持读写MOL/SDF格式文件
+- **v1.2.0** (2025-10-16): 添加批量并行计算功能
+  - 新增 `batch_interaction_energy.py` 批处理脚本
+  - 支持自动发现文件并生成所有分子对组合
+  - 智能配置并行计算资源
+  - 详见 [`docs/BATCH_CALCULATION.md`](docs/BATCH_CALCULATION.md)
+
+- **v1.1.0** (2025-10-16): 添加MOL/MOL2格式支持
+  - 支持读写MOL/SDF/MOL2格式文件
   - 完整的Pipeline集成
   - 详见 [`docs/MOL_FORMAT.md`](docs/MOL_FORMAT.md)
   
