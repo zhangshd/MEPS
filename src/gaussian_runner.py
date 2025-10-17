@@ -411,7 +411,7 @@ class InteractionEnergyPipeline:
                 basis_set=basis_set,
                 dispersion=dispersion,
                 mem=mem,
-                nproc=nproc,
+                nproc=nproc//2,
                 wait=False  # Don't wait, run in background
             )
             all_files.append(files)
