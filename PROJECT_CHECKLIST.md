@@ -27,8 +27,11 @@
 - [x] `PROJECT_STRUCTURE.md` - 项目结构说明 (11.3 KB)
 - [x] `TEST_REPORT.md` - 测试报告 (4.9 KB)
 - [x] `Gaussian+Multiwfn计算ΔE_int教程.md` - 理论背景 (已有)
+- [x] `docs/MOL2_PARSING_FIX.md` - MOL2解析修复技术文档 (NEW)
+- [x] `docs/MOL2_PARSING_FIX_REPORT.md` - MOL2修复总结报告 (NEW)
+- [x] `CHANGELOG_MOL.md` - MOL格式支持更新记录 (v1.1.1)
 
-**总计**: ~40 KB文档
+**总计**: ~45 KB文档
 
 ### ⚙️ 配置文件
 - [x] `environment.yml` - Conda环境配置

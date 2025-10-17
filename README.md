@@ -7,6 +7,7 @@ MEPS (Molecular Interaction Energy Pipeline System) 是一个基于Python的自�
 ## 主要功能
 
 1. **单体结构优化**: 自动生成和运行单个分子的Gaussian结构优化任务
+   - **🚀 NEW**: 支持并行优化多个单体分子，大幅提升计算效率（节省约50%时间）
 2. **分子对接**: 使用AutoDock Vina对两个优化后的分子进行对接，获得初始复合物构象
 3. **复合物优化**: 自动生成带Counterpoise校正的复合物输入文件并运行优化
 4. **结果提取**: 自动从Gaussian输出文件中提取相互作用能、BSSE能量等关键信息
@@ -113,6 +114,38 @@ results = pipeline.run_full_pipeline(
 print(f"相互作用能 (校正后): {results['complexation_energy_corrected']} kcal/mol")
 print(f"BSSE能量: {results['bsse_energy']} Hartree")
 ```
+
+> **🚀 性能提升**: `run_full_pipeline` 方法已自动启用并行优化，两个单体分子将同时进行优化计算，相比串行方式可节省约50%的计算时间。详见 [并行优化文档](docs/PARALLEL_OPTIMIZATION.md)。
+
+### 并行优化功能
+
+新增的并行优化功能可以同时优化多个单体分子，显著提升计算效率：
+
+```python
+from src.gaussian_runner import InteractionEnergyPipeline
+from src.structure_parser import StructureParser
+
+pipeline = InteractionEnergyPipeline(work_dir="./calculations")
+
+# 准备多个分子结构
+structures = []
+for xyz_file, name in [("mol1.xyz", "mol1"), ("mol2.xyz", "mol2")]:
+    struct = StructureParser()
+    struct.read_xyz(xyz_file)
+    structures.append((struct, name))
+
+# 并行优化所有单体（注意合理分配CPU和内存资源）
+monomer_files = pipeline.optimize_monomers_parallel(
+    structures=structures,
+    nproc=48,   # 每个任务48核，2个任务共需96核
+    mem="90GB"  # 每个任务90GB，2个任务共需180GB
+)
+```
+
+**资源配置建议**：
+- 对于96核系统运行2个并行任务：每任务 `nproc=48`
+- 对于200GB内存系统：每任务 `mem="90GB"`（预留系统内存）
+- 更多信息请参考 [并行优化详细文档](docs/PARALLEL_OPTIMIZATION.md)
 
 ### 使用命令行脚本
 

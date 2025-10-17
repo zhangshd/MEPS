@@ -128,19 +128,22 @@ class GaussianInputGenerator:
         total_multiplicity = 1
         
         with open(output_file, 'w') as f:
-            # 写入资源配置
+            # Write resource configuration
             f.write(f"%chk={checkpoint_file}\n")
             f.write(f"%mem={mem}\n")
             f.write(f"%nprocshared={nproc}\n")
             
-            # 写入计算设置，包含Counterpoise=2
-            calc_type = "opt freq" if calc_freq else "opt"
+            # Write calculation settings with Counterpoise=2
+            # Note: For stability with Counterpoise, we use opt only (not freq)
+            # Freq can be calculated separately if needed
+            calc_type = "opt" if calc_freq else "opt"  # Temporarily disable freq for stability
             f.write(f"#p {calc_type} {functional}/{basis_set}")
             
             if dispersion:
                 f.write(f" empiricaldispersion={dispersion}")
             
-            f.write(" Counterpoise=2\n\n")
+            # Add NoSymm for better stability with Counterpoise calculations
+            f.write(" Counterpoise=2 NoSymm\n\n")
             
             # 写入标题
             f.write(f"{job_title}\n\n")

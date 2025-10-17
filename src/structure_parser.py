@@ -119,9 +119,7 @@ class StructureParser:
         self.atoms = []
         for i in range(mol.NumAtoms()):
             atom = mol.GetAtom(i + 1)
-            element = atom.GetType()
-            if len(element) > 1 and element[1].isupper():
-                element = element[0]
+            element = ob.GetSymbol(atom.GetAtomicNum())
             x = atom.GetX()
             y = atom.GetY()
             z = atom.GetZ()
@@ -165,7 +163,8 @@ class StructureParser:
         Read MOL2 (Tripos) format molecular structure file
         
         This method reads MOL2 format files using OpenBabel library.
-        MOL2 format includes atom types and bond information.
+        MOL2 format includes atom types and bond information, but we extract
+        only the element symbols and coordinates for quantum chemistry calculations.
         
         Args:
             filepath: Path to the MOL2 file
@@ -192,9 +191,7 @@ class StructureParser:
         self.atoms = []
         for i in range(mol.NumAtoms()):
             atom = mol.GetAtom(i + 1)
-            element = atom.GetType()
-            if len(element) > 1 and element[1].isupper():
-                element = element[0]
+            element = ob.GetSymbol(atom.GetAtomicNum())
             x = atom.GetX()
             y = atom.GetY()
             z = atom.GetZ()
@@ -589,3 +586,47 @@ class StructureParser:
         # Update atom coordinates
         self.atoms = [(elem, all_coords_final[i, 0], all_coords_final[i, 1], all_coords_final[i, 2])
                       for i, (elem, _, _, _) in enumerate(self.atoms)]
+    
+    def check_atom_distances(self, min_distance: float = 0.5) -> Tuple[bool, List[Tuple[int, int, float]]]:
+        """
+        Check if any two atoms are too close to each other
+        
+        Args:
+            min_distance: Minimum allowed distance between atoms in Angstroms (default: 0.5)
+        
+        Returns:
+            Tuple of (is_valid, list of problematic pairs)
+            - is_valid: True if all distances are acceptable
+            - problematic_pairs: List of (atom1_idx, atom2_idx, distance) for atoms that are too close
+        """
+        problematic_pairs = []
+        n_atoms = len(self.atoms)
+        
+        for i in range(n_atoms):
+            elem_i, x_i, y_i, z_i = self.atoms[i]
+            for j in range(i + 1, n_atoms):
+                elem_j, x_j, y_j, z_j = self.atoms[j]
+                
+                # Calculate distance
+                dist = np.sqrt((x_i - x_j)**2 + (y_i - y_j)**2 + (z_i - z_j)**2)
+                
+                if dist < min_distance:
+                    problematic_pairs.append((i, j, dist))
+        
+        is_valid = len(problematic_pairs) == 0
+        return is_valid, problematic_pairs
+    
+    def get_atom_info(self, index: int) -> str:
+        """
+        Get formatted information about an atom
+        
+        Args:
+            index: Atom index (0-based)
+        
+        Returns:
+            Formatted string with atom information
+        """
+        if 0 <= index < len(self.atoms):
+            elem, x, y, z = self.atoms[index]
+            return f"Atom {index + 1}: {elem} ({x:.3f}, {y:.3f}, {z:.3f})"
+        return f"Atom {index + 1}: Invalid index"

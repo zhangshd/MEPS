@@ -204,10 +204,10 @@ class ResultExtractor:
     
     def generate_summary_report(self, output_file: str) -> None:
         """
-        生成可读的结果摘要报告
+        Generate readable summary report
         
         Args:
-            output_file: 输出报告文件路径
+            output_file: Output report file path
         """
         cp_results = self.extract_counterpoise_results()
         opt_summary = self.get_optimization_summary()
@@ -218,12 +218,17 @@ class ResultExtractor:
             f.write("分子间相互作用能计算结果报告\n")
             f.write("=" * 80 + "\n\n")
             
-            # 优化摘要
+            # Optimization summary
             f.write("【优化过程摘要】\n")
             f.write(f"  收敛状态: {'已收敛' if opt_summary['converged'] else '未收敛'}\n")
             f.write(f"  优化步数: {opt_summary['num_steps']}\n")
             f.write(f"  虚频检查: {'存在{0}个虚频'.format(opt_summary['num_imaginary_freq']) if opt_summary['has_imaginary_freq'] else '无虚频'}\n")
-            f.write(f"  最终能量: {opt_summary['final_energy']:.8f} Hartree\n\n")
+            
+            # Handle case where final_energy is None (calculation failed)
+            if opt_summary['final_energy'] is not None:
+                f.write(f"  最终能量: {opt_summary['final_energy']:.8f} Hartree\n\n")
+            else:
+                f.write(f"  最终能量: 计算失败，无法获取\n\n")
             
             # Counterpoise结果
             if cp_results['complexation_energy_corrected'] is not None:

@@ -11,6 +11,7 @@ import subprocess
 import json
 from typing import Dict, Optional, List, Tuple
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 try:
     from .gaussian_io import GaussianInputGenerator, GaussianOutputParser
@@ -44,16 +45,16 @@ class GaussianRunner:
     
     def setup_environment(self) -> Dict[str, str]:
         """
-        设置Gaussian运行环境变量
+        Setup Gaussian runtime environment variables
         
         Returns:
-            环境变量字典
+            Dictionary of environment variables
         """
         env = os.environ.copy()
         env['g16root'] = os.path.dirname(self.gaussian_root)
         env['GAUSS_EXEDIR'] = self.gaussian_root
         
-        # 添加Gaussian到PATH
+        # Add Gaussian to PATH
         if 'PATH' in env:
             env['PATH'] = f"{self.gaussian_root}:{env['PATH']}"
         else:
@@ -69,43 +70,49 @@ class GaussianRunner:
         timeout: Optional[int] = None
     ) -> subprocess.CompletedProcess:
         """
-        运行Gaussian计算
+        Run Gaussian calculation
         
         Args:
-            input_file: Gaussian输入文件(.gjf)路径
-            output_file: 输出文件路径，如果为None则自动生成
-            wait: 是否等待计算完成
-            timeout: 超时时间（秒），None表示不限时
+            input_file: Gaussian input file (.gjf) path
+            output_file: Output file path, auto-generated if None
+            wait: Whether to wait for calculation completion
+            timeout: Timeout in seconds, None means no timeout
             
         Returns:
-            subprocess.CompletedProcess对象
+            subprocess.CompletedProcess object
         """
         if output_file is None:
-            # 自动生成输出文件名
+            # Auto-generate output file name
             base_name = os.path.splitext(input_file)[0]
             output_file = f"{base_name}.log"
         
+        # Set working directory to output file's directory
+        # This ensures Gaussian temporary files (Gau-*) are created there
+        work_dir = os.path.dirname(os.path.abspath(output_file))
+        
         env = self.setup_environment()
         
-        # 运行Gaussian
+        # Run Gaussian with cwd set to output directory
         with open(output_file, 'w') as out_f:
             if wait:
                 result = subprocess.run(
-                    [self.g16_exe, input_file],
+                    [self.g16_exe, os.path.abspath(input_file)],
                     env=env,
                     stdout=out_f,
                     stderr=subprocess.PIPE,
                     text=True,
-                    timeout=timeout
+                    timeout=timeout,
+                    cwd=work_dir
                 )
             else:
-                # 后台运行
+                # Background execution
                 result = subprocess.Popen(
-                    [self.g16_exe, input_file],
+                    [self.g16_exe, os.path.abspath(input_file)],
                     env=env,
                     stdout=out_f,
                     stderr=subprocess.PIPE,
-                    text=True
+                    text=True,
+                    cwd=work_dir
                 )
         
         return result
@@ -315,6 +322,120 @@ class InteractionEnergyPipeline:
             'name': name
         }
     
+    def wait_for_calculations(
+        self,
+        log_files: List[str],
+        check_interval: int = 60,
+        timeout: Optional[int] = None
+    ) -> Dict[str, bool]:
+        """
+        Wait for multiple Gaussian calculations to complete and check their status
+        
+        Args:
+            log_files: List of output file paths to monitor
+            check_interval: Check interval in seconds
+            timeout: Timeout in seconds, None means no timeout
+            
+        Returns:
+            Dictionary mapping log file paths to success status (True/False)
+        """
+        print(f"\nMonitoring {len(log_files)} calculations...")
+        
+        start_time = time.time()
+        completed = {log_file: False for log_file in log_files}
+        results = {}
+        
+        while not all(completed.values()):
+            if timeout and (time.time() - start_time) > timeout:
+                print(f"Warning: Timeout reached after {timeout} seconds")
+                break
+            
+            for log_file in log_files:
+                if completed[log_file]:
+                    continue
+                
+                if not os.path.exists(log_file):
+                    continue
+                
+                with open(log_file, 'r') as f:
+                    content = f.read()
+                
+                if 'Normal termination' in content:
+                    print(f"  - {os.path.basename(log_file)}: Completed successfully")
+                    completed[log_file] = True
+                    results[log_file] = True
+                elif 'Error termination' in content:
+                    print(f"  - {os.path.basename(log_file)}: Failed with error")
+                    completed[log_file] = True
+                    results[log_file] = False
+            
+            if not all(completed.values()):
+                time.sleep(check_interval)
+        
+        return results
+    
+    def optimize_monomers_parallel(
+        self,
+        structures: List[Tuple[StructureParser, str]],
+        functional: str = "B3LYP",
+        basis_set: str = "6-311++G(d,p)",
+        dispersion: str = "GD3BJ",
+        mem: str = "100GB",
+        nproc: int = 96
+    ) -> List[Dict[str, str]]:
+        """
+        Optimize multiple monomer molecules in parallel
+        
+        Args:
+            structures: List of (StructureParser, name) tuples
+            functional: Functional
+            basis_set: Basis set
+            dispersion: Dispersion correction
+            mem: Memory
+            nproc: Number of CPU cores
+            
+        Returns:
+            List of dictionaries containing file paths for each monomer
+        """
+        print(f"\n{'='*60}")
+        print(f"Step: Optimize {len(structures)} monomers in parallel")
+        print(f"{'='*60}")
+        
+        # Submit all calculations
+        all_files = []
+        for structure, name in structures:
+            files = self.optimize_monomer(
+                structure=structure,
+                name=name,
+                functional=functional,
+                basis_set=basis_set,
+                dispersion=dispersion,
+                mem=mem,
+                nproc=nproc,
+                wait=False  # Don't wait, run in background
+            )
+            all_files.append(files)
+        
+        # Wait for all calculations to complete
+        log_files = [f['log'] for f in all_files]
+        results = self.wait_for_calculations(log_files)
+        
+        # Check results
+        print(f"\nParallel optimization results:")
+        for files in all_files:
+            log_file = files['log']
+            name = files['name']
+            success = results.get(log_file, False)
+            if success:
+                print(f"  - {name}: Success")
+            else:
+                print(f"  - {name}: Failed")
+                status = self.runner.check_calculation_status(log_file)
+                if status.get('error_message'):
+                    print(f"    Error: {status['error_message']}")
+        
+        return all_files
+    
     def dock_molecules(
         self,
         structure_a: StructureParser,
@@ -389,45 +510,15 @@ class InteractionEnergyPipeline:
         print(f"步骤: 优化复合物并计算相互作用能")
         print(f"{'='*60}")
         
-        # Handle complex_structure input
-        if complex_structure is not None:
-            if structure_a is None:
-                raise ValueError("When using complex_structure, structure_a must be provided to determine fragment split point")
-            
-            # Split complex_structure into fragments based on structure_a atom count
-            n_atoms_a = len(structure_a.atoms)
-            total_atoms = len(complex_structure.atoms)
-            
-            # Create fragment A from first n_atoms_a atoms
-            frag_a = StructureParser()
-            frag_a.atoms = complex_structure.atoms[:n_atoms_a]
-            frag_a.charge = structure_a.charge
-            frag_a.multiplicity = structure_a.multiplicity
-            
-            # Create fragment B from remaining atoms
-            frag_b = StructureParser()
-            frag_b.atoms = complex_structure.atoms[n_atoms_a:]
-            if structure_b is not None:
-                frag_b.charge = structure_b.charge
-                frag_b.multiplicity = structure_b.multiplicity
-            else:
-                frag_b.charge = 0
-                frag_b.multiplicity = 1
-            
-            # Use these fragments for the calculation
-            use_structure_a = frag_a
-            use_structure_b = frag_b
-            
-            print(f"使用对接后的复合物结构:")
-            print(f"  片段A: {n_atoms_a} 个原子")
-            print(f"  片段B: {total_atoms - n_atoms_a} 个原子")
-        else:
-            if structure_a is None or structure_b is None:
-                raise ValueError("Either complex_structure or both structure_a and structure_b must be provided")
-            use_structure_a = structure_a
-            use_structure_b = structure_b
+        # Validate input
+        if structure_a is None or structure_b is None:
+            raise ValueError("Both structure_a and structure_b must be provided")
         
-        # 生成文件路径
+        # Use the provided structures directly (they should already have docked coordinates if docking was used)
+        use_structure_a = structure_a
+        use_structure_b = structure_b
+        
+        # Generate file paths
         gjf_file = os.path.join(self.complex_dir, f"{name}.gjf")
         chk_file = f"{name}.chk"
         log_file = os.path.join(self.complex_dir, f"{name}.log")
@@ -502,11 +593,14 @@ class InteractionEnergyPipeline:
             json.dump(results, f, indent=2, ensure_ascii=False)
         print(f"✓ JSON结果已保存: {json_report}")
         
-        # 打印关键结果
+        # Print key results
         print(f"\n关键结果:")
-        print(f"  相互作用能 (BSSE校正): {results['complexation_energy_corrected']:.2f} kcal/mol")
-        print(f"  BSSE能量: {results['bsse_energy']:.6f} Hartree")
-        print(f"  BSSE能量: {results['bsse_energy'] * 627.509:.2f} kcal/mol")
+        if results['complexation_energy_corrected'] is not None:
+            print(f"  相互作用能 (BSSE校正): {results['complexation_energy_corrected']:.2f} kcal/mol")
+            print(f"  BSSE能量: {results['bsse_energy']:.6f} Hartree")
+            print(f"  BSSE能量: {results['bsse_energy'] * 627.509:.2f} kcal/mol")
+        else:
+            print(f"  计算失败或未完成，无法提取相互作用能")
         
         return results
     
@@ -581,15 +675,18 @@ class InteractionEnergyPipeline:
         print(f"✓ 分子A: {struct_a.get_atom_count()} 个原子")
         print(f"✓ 分子B: {struct_b.get_atom_count()} 个原子")
         
-        # 步骤1: 优化单体A
-        monomer_a_files = self.optimize_monomer(
-            struct_a, name_a, functional, basis_set, dispersion, mem, nproc
+        # 步骤1 & 2: 并行优化两个单体分子
+        monomer_files = self.optimize_monomers_parallel(
+            structures=[(struct_a, name_a), (struct_b, name_b)],
+            functional=functional,
+            basis_set=basis_set,
+            dispersion=dispersion,
+            mem=mem,
+            nproc=nproc
         )
         
-        # 步骤2: 优化单体B
-        monomer_b_files = self.optimize_monomer(
-            struct_b, name_b, functional, basis_set, dispersion, mem, nproc
-        )
+        monomer_a_files = monomer_files[0]
+        monomer_b_files = monomer_files[1]
         
         # 从优化输出中获取优化后的结构
         print("\n提取优化后的单体结构...")
@@ -599,7 +696,7 @@ class InteractionEnergyPipeline:
         opt_struct_b = StructureParser()
         opt_struct_b.read_gaussian_output(monomer_b_files['log'])
         
-        # 步骤3: 分子对接（可选）
+        # Step 3: Molecular docking (optional)
         if use_docking:
             complex_struct, docking_results = self.dock_molecules(
                 opt_struct_a,
@@ -607,12 +704,36 @@ class InteractionEnergyPipeline:
                 exhaustiveness=docking_exhaustiveness
             )
             
-            # 从对接后的复合物中分离两个片段
-            # 注意：这里简化处理，实际应用中可能需要更复杂的片段分离逻辑
-            frag_a = opt_struct_a
-            frag_b = opt_struct_b
+            # Extract two fragments from docked complex structure
+            # Fragment A consists of the first n_atoms_a atoms
+            # Fragment B consists of the remaining atoms
+            n_atoms_a = opt_struct_a.get_atom_count()
+            n_atoms_b = opt_struct_b.get_atom_count()
+            total_atoms = complex_struct.get_atom_count()
+            
+            if total_atoms != n_atoms_a + n_atoms_b:
+                raise ValueError(
+                    f"Atom count mismatch: complex has {total_atoms} atoms, "
+                    f"but expected {n_atoms_a + n_atoms_b} atoms"
+                )
+            
+            # Create fragment A from first n_atoms_a atoms of complex
+            frag_a = StructureParser()
+            frag_a.atoms = complex_struct.atoms[:n_atoms_a]
+            frag_a.charge = opt_struct_a.charge
+            frag_a.multiplicity = opt_struct_a.multiplicity
+            
+            # Create fragment B from remaining atoms of complex
+            frag_b = StructureParser()
+            frag_b.atoms = complex_struct.atoms[n_atoms_a:]
+            frag_b.charge = opt_struct_b.charge
+            frag_b.multiplicity = opt_struct_b.multiplicity
+            
+            print(f"\n使用对接后的复合物结构:")
+            print(f"  片段A ({name_a}): {n_atoms_a} 个原子")
+            print(f"  片段B ({name_b}): {n_atoms_b} 个原子")
         else:
-            # 不使用对接，直接使用优化后的单体
+            # No docking, use optimized monomers directly
             frag_a = opt_struct_a
             frag_b = opt_struct_b
         

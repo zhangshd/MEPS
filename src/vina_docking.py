@@ -352,4 +352,19 @@ class VinaDocking:
         # Merge receptor and aligned ligand (now with all atoms)
         complex_structure = molecule_a.merge(ligand_aligned)
         
+        # Check for atom overlaps
+        is_valid, problematic_pairs = complex_structure.check_atom_distances(min_distance=0.5)
+        
+        if not is_valid:
+            print(f"\nWarning: Found {len(problematic_pairs)} atom pair(s) with distances < 0.5 Angstrom")
+            print("This may cause Gaussian calculation to fail.")
+            print("Problematic atom pairs:")
+            for i, j, dist in problematic_pairs[:10]:  # Show first 10
+                info_i = complex_structure.get_atom_info(i)
+                info_j = complex_structure.get_atom_info(j)
+                print(f"  {info_i} <-> {info_j}: {dist:.3f} A")
+            if len(problematic_pairs) > 10:
+                print(f"  ... and {len(problematic_pairs) - 10} more pairs")
+            print("\nSuggestion: Try different docking parameters or check input structures.")
+        
         return complex_structure, results
