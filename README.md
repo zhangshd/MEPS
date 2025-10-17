@@ -167,7 +167,11 @@ python scripts/run_pipeline.py --help
 
 #### 批量并行计算
 
-对于需要计算多个分子对的场景，使用批处理脚本可以自动发现文件并并行计算：
+MEPS提供两种批量计算方式，分别适用于不同的计算环境：
+
+##### 方式一：本地多进程并行（适合小规模批量计算）
+
+使用Python多进程池在本地并行计算多对分子：
 
 ```bash
 # 基本用法：自动并行计算molA和molB文件夹中所有分子的两两组合
@@ -184,24 +188,51 @@ python scripts/batch_interaction_energy.py molA/ molB/ results/ \
 # 仅处理特定格式
 python scripts/batch_interaction_energy.py molA/ molB/ results/ \
     --extensions .mol .mol2
-
-# 查看使用示例和CPU配置建议
-python examples/batch_calculation_example.py
 ```
 
-**批处理脚本特点**：
-- 自动发现两个文件夹中的所有分子文件
-- 生成所有可能的分子对组合（笛卡尔积）
-- 根据系统CPU数量和单任务核数自动配置并行度
-- 每个分子对的结果保存在独立文件夹中
-- 生成 `batch_summary.json` 汇总所有计算结果
-- 支持失败重试和错误报告
+**特点**：
+- 使用Python多进程池管理任务
+- 有最大并行任务数限制（max_parallel_jobs）
+- 所有任务在一个进程中监控
+- 适合小到中等规模的批量计算
 
-**输出结构示例**：
+##### 方式二：SLURM集群调度（推荐用于大规模批量计算）
+
+使用SLURM作业调度系统提交独立的计算任务：
+
+```bash
+# 生成SLURM脚本（不自动提交）
+python scripts/batch_interaction_slurm.py molA/ molB/ results/
+
+# 生成并自动提交所有任务
+python scripts/batch_interaction_slurm.py molA/ molB/ results/ --submit
+
+# 自定义SLURM参数
+python scripts/batch_interaction_slurm.py molA/ molB/ results/ \
+    --partition gpu --cpus 48 --mem 50GB --submit
+
+# 指定计算参数
+python scripts/batch_interaction_slurm.py molA/ molB/ results/ \
+    --functional M06-2X --basis def2-TZVP
+```
+
+**特点**：
+- 每对分子作为独立的SLURM任务
+- 无并行任务数限制，由SLURM调度器管理
+- 任务独立运行，单个任务失败不影响其他任务
+- 每个任务有独立的日志文件
+- 适合大规模批量计算（数百到数千对分子）
+
+**输出结构（两种方式相同）**：
 ```
 results/
+├── slurm_logs/                 # SLURM日志目录（仅SLURM方式）
+│   ├── molA1_molB1_12345.out
+│   └── molA1_molB1_12345.err
 ├── batch_summary.json          # 总体汇总文件
+├── slurm_job_summary.json      # SLURM任务信息（仅SLURM方式）
 ├── water_methane/              # 第一对分子的结果
+│   ├── submit_job.sh          # SLURM提交脚本（仅SLURM方式）
 │   ├── complex.log
 │   ├── results.json
 │   └── ...
@@ -210,6 +241,14 @@ results/
 └── benzene_methane/            # 第三对分子的结果
     └── ...
 ```
+
+**选择建议**：
+- **本地多进程**：10-50对分子，本地工作站，需要实时监控
+- **SLURM调度**：50+对分子，集群环境，需要高容错性
+
+> 详细使用说明请参考：
+> - 本地并行: [`docs/BATCH_CALCULATION.md`](docs/BATCH_CALCULATION.md)
+> - SLURM调度: [`docs/SLURM_BATCH_CALCULATION.md`](docs/SLURM_BATCH_CALCULATION.md)
 
 ### 分步运行
 
@@ -290,6 +329,13 @@ results = pipeline.extract_results("complex.log")
 zhangshd
 
 ## 更新日志
+
+- **v1.3.0** (2025-10-17): 添加SLURM批量计算支持
+  - 新增 `batch_interaction_slurm.py` SLURM批处理脚本
+  - 支持为每对分子生成独立的SLURM任务
+  - 无并行任务数限制，由集群调度器管理
+  - 适合大规模批量计算
+  - 详见 [`docs/SLURM_BATCH_CALCULATION.md`](docs/SLURM_BATCH_CALCULATION.md)
 
 - **v1.2.0** (2025-10-16): 添加批量并行计算功能
   - 新增 `batch_interaction_energy.py` 批处理脚本
