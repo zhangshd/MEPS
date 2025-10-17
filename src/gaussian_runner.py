@@ -461,7 +461,7 @@ class InteractionEnergyPipeline:
         docker = VinaDocking(work_dir=vina_work)
         
         print("运行AutoDock Vina对接...")
-        complex_structure, results = docker.dock_two_molecules(
+        ligand_docked, results = docker.dock_two_molecules(
             structure_a,
             structure_b,
             exhaustiveness=exhaustiveness
@@ -471,13 +471,12 @@ class InteractionEnergyPipeline:
         print(f"  最佳亲和力: {results['best_affinity']} kcal/mol")
         print(f"  生成姿态数: {len(results['modes'])}")
         
-        return complex_structure, results
+        return ligand_docked, results
     
     def optimize_complex(
         self,
         structure_a: StructureParser = None,
         structure_b: StructureParser = None,
-        complex_structure: StructureParser = None,
         name: str = "complex",
         functional: str = "B3LYP",
         basis_set: str = "6-311++G(d,p)",
@@ -492,9 +491,6 @@ class InteractionEnergyPipeline:
         Args:
             structure_a: 片段A结构 (如果提供complex_structure则可选)
             structure_b: 片段B结构 (如果提供complex_structure则可选)
-            complex_structure: 已组装的复合物结构 (例如来自对接)
-                如果提供此参数，将使用前N个原子作为片段A，其余作为片段B
-                其中N是structure_a的原子数（必须同时提供structure_a以确定分割点）
             name: 复合物名称
             functional: 泛函
             basis_set: 基组
@@ -698,40 +694,13 @@ class InteractionEnergyPipeline:
         
         # Step 3: Molecular docking (optional)
         if use_docking:
-            complex_struct, docking_results = self.dock_molecules(
+            ligand_docked, docking_results = self.dock_molecules(
                 opt_struct_a,
                 opt_struct_b,
                 exhaustiveness=docking_exhaustiveness
             )
-            
-            # Extract two fragments from docked complex structure
-            # Fragment A consists of the first n_atoms_a atoms
-            # Fragment B consists of the remaining atoms
-            n_atoms_a = opt_struct_a.get_atom_count()
-            n_atoms_b = opt_struct_b.get_atom_count()
-            total_atoms = complex_struct.get_atom_count()
-            
-            if total_atoms != n_atoms_a + n_atoms_b:
-                raise ValueError(
-                    f"Atom count mismatch: complex has {total_atoms} atoms, "
-                    f"but expected {n_atoms_a + n_atoms_b} atoms"
-                )
-            
-            # Create fragment A from first n_atoms_a atoms of complex
-            frag_a = StructureParser()
-            frag_a.atoms = complex_struct.atoms[:n_atoms_a]
-            frag_a.charge = opt_struct_a.charge
-            frag_a.multiplicity = opt_struct_a.multiplicity
-            
-            # Create fragment B from remaining atoms of complex
-            frag_b = StructureParser()
-            frag_b.atoms = complex_struct.atoms[n_atoms_a:]
-            frag_b.charge = opt_struct_b.charge
-            frag_b.multiplicity = opt_struct_b.multiplicity
-            
-            print(f"\n使用对接后的复合物结构:")
-            print(f"  片段A ({name_a}): {n_atoms_a} 个原子")
-            print(f"  片段B ({name_b}): {n_atoms_b} 个原子")
+            frag_a = opt_struct_a
+            frag_b = ligand_docked
         else:
             # No docking, use optimized monomers directly
             frag_a = opt_struct_a

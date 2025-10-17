@@ -8,6 +8,7 @@ Date: 2025-10-12
 import os
 import subprocess
 from typing import Dict, Optional, Tuple, List
+from openbabel import pybel
 
 try:
     from .structure_parser import StructureParser
@@ -260,36 +261,39 @@ class VinaDocking:
         add_hydrogens: bool = True
     ) -> StructureParser:
         """
-        从对接结果中提取指定模式的姿态
+        Extract specified docking pose from docking results
         
         Args:
-            docked_pdbqt: 对接结果PDBQT文件
-            output_pdb: 输出PDB文件路径
-            mode: 要提取的模式编号（1为最佳）
-            add_hydrogens: 是否添加氢原子
+            docked_pdbqt: Docked result PDBQT file
+            output_pdb: Output PDB file path
+            mode: Mode number to extract (1 is the best)
+            add_hydrogens: Whether to add hydrogen atoms
             
         Returns:
-            包含提取姿态的StructureParser对象
+            StructureParser object containing the extracted pose
         """
-        # 使用obabel提取指定模式
-        cmd = [
-            "obabel",
-            docked_pdbqt,
-            "-O", output_pdb,
-            f"-f{mode}",  # 从第mode个构象开始
-            f"-l{mode}"   # 到第mode个构象结束
-        ]
+        # Read all conformations from PDBQT file using pybel
+        mols = list(pybel.readfile("pdbqt", docked_pdbqt))
         
+        if not mols:
+            raise RuntimeError(f"Failed to read docking results from {docked_pdbqt}")
+        
+        if mode < 1 or mode > len(mols):
+            raise ValueError(f"Mode {mode} is out of range (1-{len(mols)})")
+        
+        # Extract the specified conformation (mode is 1-indexed)
+        mol = mols[mode - 1]
+        
+        # Write to PDB file
+        mol.write("pdb", output_pdb, overwrite=True)
+        mol = next(pybel.readfile("pdb", output_pdb))
         # Add hydrogens if requested
         if add_hydrogens:
-            cmd.append("-h")
+            mol.addh()
+            print("Added hydrogens to the extracted pose.")
+        mol.write("pdb", output_pdb, overwrite=True)
         
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        
-        if result.returncode != 0:
-            raise RuntimeError(f"提取对接姿态失败: {result.stderr}")
-        
-        # 读取提取的PDB文件
+        # Read the extracted PDB file into StructureParser
         parser = StructureParser()
         parser.read_pdb(output_pdb)
         
@@ -341,30 +345,5 @@ class VinaDocking:
         
         # Extract best pose (only heavy atoms from PDBQT)
         best_pose_pdb = os.path.join(self.work_dir, "best_pose.pdb")
-        ligand_docked = self.extract_best_pose(output_pdbqt, best_pose_pdb, mode=1, add_hydrogens=False)
-        
-        # Align original ligand (with all hydrogens) to docked pose
-        # This preserves hydrogen atoms in correct positions
-        import copy
-        ligand_aligned = copy.deepcopy(molecule_b)
-        ligand_aligned.align_to(ligand_docked)
-        
-        # Merge receptor and aligned ligand (now with all atoms)
-        complex_structure = molecule_a.merge(ligand_aligned)
-        
-        # Check for atom overlaps
-        is_valid, problematic_pairs = complex_structure.check_atom_distances(min_distance=0.5)
-        
-        if not is_valid:
-            print(f"\nWarning: Found {len(problematic_pairs)} atom pair(s) with distances < 0.5 Angstrom")
-            print("This may cause Gaussian calculation to fail.")
-            print("Problematic atom pairs:")
-            for i, j, dist in problematic_pairs[:10]:  # Show first 10
-                info_i = complex_structure.get_atom_info(i)
-                info_j = complex_structure.get_atom_info(j)
-                print(f"  {info_i} <-> {info_j}: {dist:.3f} A")
-            if len(problematic_pairs) > 10:
-                print(f"  ... and {len(problematic_pairs) - 10} more pairs")
-            print("\nSuggestion: Try different docking parameters or check input structures.")
-        
-        return complex_structure, results
+        ligand_docked = self.extract_best_pose(output_pdbqt, best_pose_pdb, mode=1, add_hydrogens=True)
+        return ligand_docked, results
